@@ -1,7 +1,8 @@
-from fastapi import FastAPI, HTTPException, Form, Depends, Query, Request
+from fastapi import FastAPI, HTTPException, Form, Depends, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+import time
 
 
 from pymongo.mongo_client import MongoClient
@@ -44,16 +45,20 @@ class SensorData(BaseModel):
 async def receive_sensor_data(
     temperature=Query(0, description="Skip items"),
     weight=Query(0, description="Limit items"),
+    unix=Query(0, description="data sended time"),
 ):
-    print(temperature, weight)
+    # buraya bir veri daha eklendi unix adında. bu datanın arduinodan gönderildiği zamanı söylemekte
+    # bu veriyi tarih zaman formatına dönüştürp mongoya kaydedebiliriz, current time yerine kullnadım.
+    data_time = datetime.fromtimestamp(unix)
+    print(temperature, weight,unix,data_time)
+   
     try:
         # Insert sensor data into the MongoDB collection
-        current_time = datetime.now()
         result = collection.insert_one(
             {
                 "temperature": temperature,
                 "weight": weight,
-                "timestamp": current_time,  # Add current time to the data
+                "timestamp": data_time,  # Add current time to the data
             }
         )
         print(f"Data saved to MongoDB with ID: {result.inserted_id}")
@@ -132,7 +137,16 @@ async def dashboard(request: Request):
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
+@app.get("/api/unix")
+def read_unix_time():
+    return {"unix": int(time.time())}
+ 
+@app.get("/api/ping")
+def ping():
+    # TODO: buarada gelen ping ile cihazın online olduğuna dair bir bir bilgi tutulmalı, ite ne bileyim 30 saniye ping gelmezse raporlamada makine offline diyebiliriz
+    return Response(status_code=200)
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="172.16.55.35", port=8000)
+    uvicorn.run(app, host="192.168.1.65", port=8000)
